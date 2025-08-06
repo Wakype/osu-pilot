@@ -12,7 +12,7 @@
     <img src="https://img.shields.io/badge/version-1.5-red.svg" alt="Bot Version">
     <img src="https://img.shields.io/badge/python-3.8+-blue.svg" alt="Python Version">
     <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License">
-    <img src="https://img.shields.io/badge/status-stable-brightgreen" alt="Status">
+    <img src="https://img.shields.io/badge/status-work in progress-yellow" alt="Status">
 </p>
 </div>
 
