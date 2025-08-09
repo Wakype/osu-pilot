@@ -34,6 +34,45 @@ For more information, live demo, and more detailed feature breakdowns, please vi
 
 ---
 
+## 🎮 How to Use
+
+> **⚠️ Important:** Before starting, make sure your in-game keybinds for hitting notes are set to **`A`** and **`S`**. The bot uses these keys to play.
+
+1.  **Launch the Bot**
+    - Run the program (`python main.py` or the `.exe`). The bot's overlay will appear on your screen.
+    - If it's your first time, a calibration window will pop up. Complete the simple reaction time test. On future launches, you can skip this step.
+
+2.  **Select a Beatmap in osu!**
+    - Open osu! and choose any beatmap. When you are at the song selection screen, the bot's overlay will automatically update with the map's information.
+
+3.  **Choose Your Options (Optional)**
+    - Before starting the map, you can click the checkboxes on the overlay to enable mods like `HR`, `DT`, `NC`, or the `Flow Aim` movement style.
+    - > *Tip: If you can't click the checkboxes, press the `Windows` key to unfocus the osu! window, make your selections, then click back into the game.*
+
+4.  **Sync and Play**
+    - Start the beatmap in osu!. As soon as the very first hit circle begins to appear (when its approach circle shows up), press the **`Q`** key.
+    - This single keypress synchronizes the bot, and it will immediately take over and start playing.
+
+5.  **Controlling the Bot**
+    - To **stop the bot** mid-play, press the **`Esc`** key.
+    - To **close the entire program**, press **`Ctrl + Page Down`**.
+    - For a complete list of controls, please refer to the **Hotkeys** section.
+
+---
+
+## ⌨️ Hotkeys
+
+A quick reference for all available controls.
+
+| Key Combination    | Action                                                |
+| ------------------ | ----------------------------------------------------- |
+| `Q`                | Synchronizes and starts the bot when a map begins.    |
+| `Esc`              | Immediately stops the bot during gameplay.            |
+| `Ctrl + Page Up`   | Toggles the visibility of the GUI overlay.            |
+| `Ctrl + Page Down` | Safely shuts down the bot script.                     |
+
+---
+
 ## ✨ Key Features
 
 | Feature                 | Description                                                                                                   |
@@ -61,7 +100,7 @@ The bot operates in a clear, sequential lifecycle:
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Getting Started (For Dev)
 
 <details>
 <summary><strong>Step 1: Prerequisites & Installation</strong></summary>
@@ -95,19 +134,6 @@ That's it! There is no manual configuration.
 3.  The bot's overlay will now be visible. You can now launch and play osu!.
 
 </details>
-
----
-
-## ⌨️ Hotkeys
-
-A quick reference for all available controls.
-
-| Key Combination    | Action                                                |
-| ------------------ | ----------------------------------------------------- |
-| `Q`                | Synchronizes and starts the bot when a map begins.    |
-| `Esc`              | Immediately stops the bot during gameplay.            |
-| `Ctrl + Page Up`   | Toggles the visibility of the GUI overlay.            |
-| `Ctrl + Page Down` | Safely shuts down the bot script.                     |
 
 ---
 
