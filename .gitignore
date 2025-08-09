@@ -35,3 +35,8 @@ test.md
 calibrate.py
 autocalibrate.py
 pixel_finder.py
+
+# --- Web Page ---
+osu-pilot-website/
+osu-pilot-website/src/App.tsx
+osu-pilot-website/vite.config.ts
