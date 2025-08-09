@@ -30,7 +30,7 @@
 
 For more information, live demo, and more detailed feature breakdowns, please visit the official website:
 
-**[Visit the osu!pilot Website](https://osu-pilot.github.io)**
+**[Visit the osu!pilot Website](https://wakype.github.io/osu-pilot/)**
 
 ---
 
