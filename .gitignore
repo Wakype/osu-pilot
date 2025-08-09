@@ -1,0 +1,37 @@
+# # osu-pilot .gitignore
+
+# --- Python ---
+# Byte-compiled / optimized / C-extensions
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- Build & Distribution ---
+# Directories created by build tools like PyInstaller
+build/
+dist/
+
+# --- Generated Files ---
+# PyInstaller spec file
+*.spec
+
+# --- Configuration ---
+# Local configuration files that shouldn't be versioned
+config.ini
+settings.json
+
+# --- Backups & Temporary Files ---
+# All backup scripts
+backup.py
+backup_*.py
+
+# Temporary test/markdown files
+test/
+test.md
+
+# --- Utility & Other Scripts ---
+# Other scripts to be ignored as per request
+# (Keeping only main.py and overlay.py)
+calibrate.py
+autocalibrate.py
+pixel_finder.py
