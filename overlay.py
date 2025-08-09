@@ -1,9 +1,35 @@
-# overlay.py
-
 import tkinter as tk
 from tkinter import font, ttk
 
 class OverlayWindow:
+    """
+    Manages the graphical user interface (GUI) overlay for the application.
+
+    This class is responsible for creating, displaying, and updating two distinct,
+    movable overlay windows using Tkinter. It serves as the primary visual
+    component, providing real-time feedback and user controls.
+
+    Windows Managed:
+      - Idle Window: A compact window displayed when no beatmap is loaded. It
+        shows the bot's current status (e.g., IDLE) and provides checkboxes
+        for toggling gameplay mods (HR, DT, NC) and movement styles (Flow Aim).
+      - Detail Window: A more comprehensive window that appears when a beatmap
+        is successfully loaded. It displays detailed information such as beatmap
+        title, difficulty stats (CS, AR, OD, HP), the user's calibrated
+        reaction time, and data about the next upcoming hit object.
+
+    Key Features:
+      - State-driven display that automatically switches between idle and detail views.
+      - Draggable interface, allowing the user to reposition the windows on screen.
+      - A public API of `update_*` methods to dynamically change the displayed
+        information (e.g., status, beatmap name, difficulty).
+      - Integration with a ModHandler to reflect and control active gameplay mods.
+      - A `toggle_visibility` method to hide or show the entire overlay.
+      - Exposes configuration options like "Flow Aim" for other modules to query.
+
+    The class encapsulates all Tkinter setup, styling, and event handling,
+    and runs the main GUI loop via its `run()` method.
+    """
     def __init__(self, mod_handler=None):
         self.root = tk.Tk()
         self.root.withdraw()
@@ -36,8 +62,7 @@ class OverlayWindow:
         self.hr_var = tk.BooleanVar()
         self.dt_var = tk.BooleanVar()
         self.nc_var = tk.BooleanVar()
-        # --- NEW: Variable for the new Flow Aim checkbox ---
-        self.flow_aim_var = tk.BooleanVar(value=False) # Default is OFF
+        self.flow_aim_var = tk.BooleanVar(value=False)
 
         self._offset_x = 0
         self._offset_y = 0
@@ -46,7 +71,7 @@ class OverlayWindow:
 
     def _configure_toplevel(self, window):
         window.overrideredirect(True)
-        window.attributes("-topmost", True, "-transparentcolor", "black", "-alpha", 0.80)
+        window.attributes("-topmost", True, "-transparentcolor", "black", "-alpha", 1)
         window.configure(bg="black")
         window.geometry(f"+{self.padding}+{self.padding}")
 
@@ -73,11 +98,9 @@ class OverlayWindow:
 
         ttk.Separator(frame, orient='horizontal').pack(side="top", fill="x", padx=5, pady=5)
         
-        # Beatmap status label
         tk.Label(frame, text="BEATMAP NOT FOUND", font=self.fonts["main"],
                  fg=self.colors["not_found"], bg=self.colors["background"]).pack(side="top", anchor="w", padx=10, pady=(0, 5))
 
-        # Gameplay mods frame
         mod_frame = tk.Frame(frame, bg=self.colors["background"])
         style = ttk.Style()
         style.configure("TCheckbutton",
@@ -98,7 +121,6 @@ class OverlayWindow:
         
         mod_frame.pack(side="top", fill="x", padx=10, pady=(5, 0))
         
-        # --- NEW: Frame for movement style options ---
         style_frame = tk.Frame(frame, bg=self.colors["background"])
         flow_aim_button = ttk.Checkbutton(style_frame, text="Flow Aim", variable=self.flow_aim_var, style="TCheckbutton")
         flow_aim_button.pack(side="left", padx=2, fill="x", expand=True)
@@ -120,7 +142,6 @@ class OverlayWindow:
             self.mod_handler.toggle_nc()
             if self.nc_var.get(): self.dt_var.set(False)
 
-    # --- NEW: Method for the pilot to check the movement style ---
     def is_flow_aim_active(self):
         return self.flow_aim_var.get()
 

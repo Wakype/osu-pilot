@@ -5,7 +5,7 @@ import random
 import statistics
 
 class CalibrationState:
-    """Class untuk mengelola state dari tes reaksi."""
+    """Class to manage the state of the reaction test."""
     def __init__(self):
         self.reaction_times = []
         self.trials_left = 5
@@ -15,23 +15,41 @@ class CalibrationState:
 
 def run_calibration(parent, previous_reaction_time_sec=None):
     """
-    Menjalankan proses kalibrasi menggunakan Toplevel sebagai anak dari parent.
+    Manages and executes a multi-stage user reaction time calibration test.
+
+    This function guides the user through a three-part process to determine their
+    median reaction time:
+    1.  An initial dialog prompts the user to either start a new calibration
+        test or use a previously recorded reaction time, if available.
+    2.  A full-screen test is conducted. The screen will flash white at random
+        intervals, and the user must press the 'q' key as quickly as possible.
+        This is repeated five times.
+    3.  A final window displays the results of each of the five tests and
+        presents the calculated median reaction time.
+
+    The entire process is modal, waiting for the user to complete or cancel
+    the calibration before returning control.
 
     Args:
-        parent (tk.Tk): Root window utama dari aplikasi.
-        previous_reaction_time_sec (float, optional): Waktu reaksi yang disimpan sebelumnya.
+        parent (tk.Tk): The main or root tkinter window that will serve as the
+                        parent for all calibration-related windows.
+        previous_reaction_time_sec (float, optional): A previously recorded
+                                                     reaction time in seconds. If
+                                                     provided, the user will be
+                                                     given the option to reuse this
+                                                     value. Defaults to None.
 
     Returns:
-        float or None: Waktu reaksi yang dipilih, atau None jika dibatalkan.
+        float: The calculated median reaction time in seconds if the test is
+               completed successfully.
+        None: If the user cancels the process at any stage (e.g., by closing a
+              window before completion).
     """
-    # Fungsi helper untuk menggambar persegi dengan sudut tumpul
     def _create_round_rect(canvas, x1, y1, x2, y2, r, **kwargs):
         canvas.create_polygon(x1 + r, y1, x2 - r, y1, x2, y1, x2, y1 + r, x2, y2 - r, x2, y2, x2 - r, y2, x1 + r, y2, x1, y2, x1, y2 - r, x1, y1 + r, x1, y1, smooth=True, **kwargs)
 
-    # --- Container untuk menyimpan pilihan pengguna ---
     choice_container = {'choice': None}
     
-    # --- STAGE 1: JENDELA PILIHAN ---
     choice_window = tk.Toplevel(parent)
     choice_window.overrideredirect(True)
     choice_window.attributes("-topmost", True, "-transparentcolor", "black", "-alpha", 0.95)
@@ -41,7 +59,6 @@ def run_calibration(parent, previous_reaction_time_sec=None):
     x, y = (screen_width // 2) - (width // 2), (screen_height // 2) - (height // 2)
     choice_window.geometry(f"{width}x{height}+{x}+{y}")
     
-    # Setup UI jendela pilihan...
     canvas = tk.Canvas(choice_window, bg="black", highlightthickness=0)
     canvas.pack(fill="both", expand=True)
     colors = {"background": "#1A1B26", "foreground": "#A9B1D6", "header": "#FFFFFF", "accent": "#7AA2F7", "border": "#7AA2F7", "hover_bg": "#414868"}
@@ -64,15 +81,13 @@ def run_calibration(parent, previous_reaction_time_sec=None):
         tk.Button(button_frame, text=f"Use Previous ({prev_rt_ms:.0f} ms)", command=lambda: set_choice('use_previous'), font=fonts["title"], bg="#2A2D3B", fg=colors["header"], relief="flat", activebackground=colors["border"], activeforeground=colors["header"], width=20, cursor="hand2").pack(pady=5)
 
     choice_window.focus_force()
-    # Cara yang benar untuk menunggu Toplevel ditutup
     parent.wait_window(choice_window)
 
     if choice_container['choice'] == 'use_previous':
         return previous_reaction_time_sec
     elif choice_container['choice'] != 'start':
-        return None # Pengguna menutup jendela, dianggap batal
+        return None
 
-    # --- STAGE 2: TES REAKSI LAYAR PENUH ---
     state = CalibrationState()
     test_window = tk.Toplevel(parent)
     state.window = test_window
@@ -111,12 +126,10 @@ def run_calibration(parent, previous_reaction_time_sec=None):
     parent.wait_window(test_window)
 
     if not state.reaction_times:
-        return None # Tes dibatalkan
+        return None
 
     median_reaction_time = statistics.median(state.reaction_times)
 
-    # --- STAGE 3: JENDELA HASIL ---
-    # Implementasi jendela hasil yang lengkap
     result_window = tk.Toplevel(parent)
     result_window.overrideredirect(True)
     result_window.attributes("-topmost", True, "-transparentcolor", "black", "-alpha", 0.95)

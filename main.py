@@ -1,5 +1,3 @@
-# main.py
-
 import threading
 import keyboard
 import math
@@ -12,21 +10,33 @@ from config import REACTION_TIME_DEFAULT
 import utils
 
 def main():
-    """Menginisialisasi dan menjalankan aplikasi."""
+    """
+    Initializes and runs the main application.
+
+    This function serves as the primary entry point, orchestrating the setup
+    and execution of all core components. The process includes:
     
+    1.  Creating the main GUI overlay window.
+    2.  Running a mandatory reaction time calibration test. It allows the user
+        to perform a new test or use a previously saved value. If the calibration
+        is cancelled or fails, it reverts to a default value.
+    3.  Initializing the main 'Pilot' bot logic with the determined
+        reaction time.
+    4.  Spawning a separate daemon thread for the Pilot's continuous execution,
+        ensuring the GUI remains responsive.
+    5.  Registering global hotkeys (`Ctrl+PgUp` to toggle the overlay,
+        `Ctrl+PgDn` to exit).
+    6.  Starting the Tkinter main event loop, which listens for events and
+        keeps the application running until explicitly quit.
+    """
     mod_handler = ModHandler()
-    # 1. Membuat instance Overlay. Ini juga membuat root tk.Tk() utama.
     overlay = OverlayWindow(mod_handler) 
 
     try:
-        # 2. Memuat data kalibrasi sebelumnya
         previous_rt = utils.load_calibration_data()
         
-        # 3. Menjalankan kalibrasi dengan meneruskan root dari overlay sebagai induk
         chosen_reaction_time = run_calibration(overlay.root, previous_rt)
 
-        # 4. Jika kalibrasi baru selesai, simpan hasilnya.
-        #    Gunakan toleransi kecil untuk perbandingan float.
         is_new_calibration = (chosen_reaction_time is not None and 
                               (previous_rt is None or not math.isclose(chosen_reaction_time, previous_rt)))
         
@@ -34,15 +44,13 @@ def main():
              utils.save_calibration_data(chosen_reaction_time)
 
     except Exception as e:
-        print(f"Tidak dapat menjalankan kalibrasi karena error: {e}.")
+        print(f"Could not run calibration due to an error: {e}.")
         chosen_reaction_time = REACTION_TIME_DEFAULT
 
-    # Jika kalibrasi dibatalkan oleh pengguna, gunakan nilai default.
     if chosen_reaction_time is None:
-        print("Kalibrasi dibatalkan, menggunakan nilai default.")
+        print("Calibration cancelled, using default value.")
         chosen_reaction_time = REACTION_TIME_DEFAULT
 
-    # 5. Perbarui UI overlay dengan nilai kalibrasi yang dipilih
     overlay.update_reaction_time(chosen_reaction_time)
     
     print("\nBot starting...")
@@ -56,7 +64,6 @@ def main():
     keyboard.add_hotkey('ctrl+page up', overlay.toggle_visibility)
     keyboard.add_hotkey('ctrl+page down', lambda: overlay.root.quit())
 
-    # 6. Jalankan mainloop utama aplikasi dari overlay.
     overlay.run()
 
     print("Exiting script.")

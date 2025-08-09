@@ -1,4 +1,32 @@
-# parser.py
+"""
+Handles the location, parsing, and interpretation of .osu beatmap files.
+
+This module serves as the bridge between the raw .osu file format and the
+structured data needed for the application's gameplay logic. It contains
+functions to find the correct beatmap file based on the game's window title,
+parse its contents into a Python dictionary, and perform complex calculations
+to interpret game objects like sliders.
+
+Core Workflow:
+1.  `find_and_process_beatmap()`: The main entry point function. It takes a
+    beatmap name and searches a given songs directory. It uses string
+    simplification and matching to locate the specific .osu file
+    corresponding to the active map and difficulty.
+2.  `parse_osu_file()`: Once a file is found, this function reads it section by
+    section, parsing metadata, difficulty settings, timing points, and a
+    list of all hit objects (circles, sliders, spinners).
+
+Key Calculation Functions:
+- `calculate_slider_path()`: For slider objects, this function computes the
+  precise geometric path of the slider's curve. It supports Linear,
+  Perfect Circle, and multi-segment Bezier curve types.
+- `get_slider_duration()`: Calculates the exact time in milliseconds a slider
+  must be held, based on its pixel length, the map's slider multiplier,
+  and the relevant timing points.
+
+The final output is a dictionary containing all the necessary data to
+simulate gameplay for a given beatmap.
+"""
 
 import os
 import re
@@ -8,14 +36,9 @@ import numpy as np
 import utils
 
 def get_slider_duration(hit_object, difficulty_data, timing_points):
-    """
-    Calculates the total duration of a slider in milliseconds.
-    This calculation is based on pixel length, slider multiplier, and timing points.
-    """
     slider_multiplier = difficulty_data.get("SliderMultiplier", 1.4)
     beat_length_ms = -1
 
-    # Find the relevant uninherited timing point before the hit object
     for tp in timing_points:
         if tp['time'] <= hit_object['time']:
             if tp['beatLength'] > 0:
@@ -23,7 +46,6 @@ def get_slider_duration(hit_object, difficulty_data, timing_points):
         else:
             break
 
-    # Apply relevant inherited timing points
     for tp in reversed(timing_points):
         if tp['time'] <= hit_object['time']:
             if tp['beatLength'] < 0:
@@ -36,7 +58,6 @@ def get_slider_duration(hit_object, difficulty_data, timing_points):
     return (hit_object['pixelLength'] / (100.0 * slider_multiplier)) * beat_length_ms * hit_object['slides']
 
 def get_bezier_point(t, control_points):
-    """Calculates a point on a Bezier curve based on parameter t."""
     n = len(control_points) - 1
     point = np.zeros(2)
     for i, p in enumerate(control_points):
@@ -45,29 +66,24 @@ def get_bezier_point(t, control_points):
     return point
 
 def _approximate_curve_length(control_points):
-    """Approximates the length of a Bezier curve by summing distances between control points."""
     length = 0
     for i in range(len(control_points) - 1):
         length += np.linalg.norm(control_points[i+1] - control_points[i])
     return length
 
 def calculate_slider_path(hit_object, num_points=100):
-    """
-    Generates a series of coordinate points that form a slider's path.
-    Supports Linear (L), Perfect Circle (P), and Bezier (B) curve types.
-    """
     curve_type = hit_object['curveType']
     control_points_raw = [np.array(p) for p in hit_object['curvePoints']]
     path = []
 
-    if curve_type == 'L':  # Linear
+    if curve_type == 'L':
         start_point, end_point = control_points_raw
         for i in range(num_points + 1):
             t = i / num_points
             pos = start_point * (1 - t) + end_point * t
             path.append(pos)
 
-    elif curve_type == 'P':  # Perfect Circle
+    elif curve_type == 'P':
         start_point, mid_point, end_point = control_points_raw
         if abs(np.cross(mid_point - start_point, end_point - start_point)) < 1e-5:
             return calculate_slider_path({'curveType': 'L', 'curvePoints': [start_point, end_point]}, num_points)
@@ -99,7 +115,7 @@ def calculate_slider_path(hit_object, num_points=100):
             pos = np.array([center[0] + radius * np.cos(angle), center[1] + radius * np.sin(angle)])
             path.append(pos)
 
-    elif curve_type == 'B':  # Bezier
+    elif curve_type == 'B':
         segments = []
         current_segment = [control_points_raw[0]]
         for i in range(1, len(control_points_raw)):
@@ -133,9 +149,6 @@ def calculate_slider_path(hit_object, num_points=100):
     return [tuple(p.astype(int)) for p in path]
 
 def parse_osu_file(file_path):
-    """
-    Reads and parses a .osu file to extract beatmap data.
-    """
     if not os.path.exists(file_path):
         return None
 
@@ -179,9 +192,9 @@ def parse_osu_file(file_path):
                                       "type": int(parts[3])}
                         obj_type = hit_object['type']
 
-                        if obj_type & 8:  # Spinner
+                        if obj_type & 8:
                             hit_object['endTime'] = int(parts[5])
-                        elif obj_type & 2:  # Slider
+                        elif obj_type & 2:
                             slider_parts = parts[5].split('|')
                             hit_object['curveType'] = slider_parts[0]
                             curve_points = [(hit_object['x'], hit_object['y'])]
@@ -200,10 +213,6 @@ def parse_osu_file(file_path):
         return None
 
 def find_and_process_beatmap(beatmap_name_from_title, songs_directory):
-    """
-    Finds the corresponding .osu file based on the game window title.
-    This function matches the song folder and the difficulty name.
-    """
     print(f"Beatmap Detected: {beatmap_name_from_title}")
     cleaned_title = utils.clean_filename(beatmap_name_from_title)
     simplified_title = utils.simplify_string(cleaned_title)

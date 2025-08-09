@@ -1,5 +1,3 @@
-# pilot.py
-
 import time
 import random
 from enum import Enum, auto
@@ -21,6 +19,40 @@ class State(Enum):
     RUNNING = auto()
 
 class Pilot:
+    """
+    The central control unit for the autopilot functionality.
+
+    This class acts as the "brain" of the application, operating as a state
+    machine that manages the bot's lifecycle from detection to execution.
+    It is responsible for monitoring the game state, processing beatmap data,
+    and simulating human-like gameplay by controlling the mouse and keyboard.
+
+    Core State Machine:
+      - IDLE: The default state. The Pilot monitors the active window title,
+        waiting for the user to enter a beatmap in the game client.
+      - ARMED: Once a beatmap is detected, its data is parsed and loaded.
+        The Pilot then waits for a manual 'q' key press from the user to
+        synchronize its internal clock with the song's start time.
+      - RUNNING: The Pilot takes control, iterating through the beatmap's
+        hit objects and executing them with precise timing until the map
+        is completed or manually aborted with the 'esc' key.
+
+    Key Functionality:
+    - Synchronization: Uses the user's calibrated reaction time and the map's
+      Approach Rate (AR) to precisely calculate the song's absolute start
+      time. Action timings can be further adjusted with a global offset from
+      the configuration file.
+    - Humanized Mouse Movement: Generates realistic, curved mouse paths using
+      quadratic Bezier curves. The path's shape is determined by one of two
+      modes selectable in the overlay:
+        - Default Aim: A simple, randomized curve.
+        - Flow Aim: A momentum-based curve that produces smoother, more
+          natural transitions between fast-moving objects.
+      Perlin noise is also applied to the path to add further realism.
+    - Object Execution: Contains specific logic to handle different hit object
+      types, including circles, sliders (following their calculated path), and
+      spinners.
+    """
     def __init__(self, overlay, reaction_time_sec, mod_handler):
         self.overlay = overlay
         self.calibrated_reaction_time_sec = reaction_time_sec
@@ -31,13 +63,13 @@ class Pilot:
         self.last_beatmap_title = None
 
         self.screen_width, self.screen_height = pyautogui.size()
-        pydirectinput.PAUSE = 0.001
+        pydirectinput.PAUSE = 0
 
         self.q_pressed_flag = False
         self.q_press_time = 0
         self.esc_pressed_flag = False
 
-        self.noise_strength = 2.5
+        self.noise_strength = 5
         self.noise_scale = 10.0
         self.noise_octaves = 2
         self.noise_persistence = 0.6
@@ -155,7 +187,9 @@ class Pilot:
             hit_object = self.beatmap_data["HitObjects"][hit_object_index]
             self.overlay.update_note_info(hit_object, hit_object_index)
 
-            target_time_sec = start_time + (hit_object['time'] / 1000.0)
+            offset_sec = config.TIMING_OFFSET_MS / 1000.0
+            target_time_sec = start_time + (hit_object['time'] / 1000.0) + offset_sec
+            
             target_screen_pos = utils.convert_coordinates(hit_object['x'], hit_object['y'], self.screen_width, self.screen_height)
             time_to_move_sec = target_time_sec - last_action_time_sec
 
@@ -165,7 +199,6 @@ class Pilot:
                 dist = np.linalg.norm(p2 - p0)
 
                 if self.overlay.is_flow_aim_active():
-                    # --- FLOW AIM (MOMENTUM) LOGIC ---
                     midpoint = (p0 + p2) / 2
                     if p_minus_1 is not None and dist > 0:
                         vec_in = p0 - p_minus_1
@@ -198,9 +231,8 @@ class Pilot:
                         offset = random.uniform(-max_offset, max_offset)
                         p1 = midpoint + perp_vec * offset
                 else:
-                    # --- DEFAULT (RANDOM) LOGIC ---
                     midpoint = (p0 + p2) / 2
-                    vec = p2 - p0  # <-- THIS LINE WAS MISSING
+                    vec = p2 - p0
                     if dist > 0:
                         perp_vec = np.array([-vec[1], vec[0]]) / dist
                     else:
@@ -284,7 +316,9 @@ class Pilot:
                         final_slider_pos_osu = path[-1] if hit_object['slides'] % 2 == 1 else path[0]
                         last_screen_pos = utils.convert_coordinates(final_slider_pos_osu[0], final_slider_pos_osu[1], self.screen_width, self.screen_height)
             else:
-                pydirectinput.press(key_to_press)
+                pydirectinput.keyDown(key_to_press)
+                time.sleep(0.01)
+                pydirectinput.keyUp(key_to_press)
                 last_screen_pos = target_screen_pos
             
             p_minus_1 = np.array(last_screen_pos)

@@ -1,0 +1,7 @@
+keyboard
+pydirectinput
+pyautogui
+numpy
+pywin32
+psutil
+noise
