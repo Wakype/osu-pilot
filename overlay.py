@@ -67,7 +67,7 @@ class OverlayWindow:
         self.idle_status_indicator.pack(side="left", padx=(0, 5), anchor="center")
         tk.Label(header_frame, textvariable=self.status_var, font=self.fonts["main"],
                  fg=self.colors["foreground"], bg=self.colors["background"]).pack(side="left", anchor="center")
-        tk.Label(header_frame, text="osu!pilot v1.5", font=self.fonts["title"],
+        tk.Label(header_frame, text="osu!pilot v1.0", font=self.fonts["title"],
                  fg=self.colors["header"], bg=self.colors["background"]).pack(side="right", anchor="center")
         header_frame.pack(side="top", fill="x", padx=10, pady=5)
 
@@ -138,7 +138,7 @@ class OverlayWindow:
         right_header_frame = tk.Frame(header_frame, bg=self.colors["background"])
         tk.Label(right_header_frame, textvariable=self.rt_var, font=self.fonts["main"],
                  fg=self.colors["accent"], bg=self.colors["background"]).pack(side="left", padx=(0, 10))
-        tk.Label(right_header_frame, text="osu!pilot v1.5", font=self.fonts["title"],
+        tk.Label(right_header_frame, text="osu!pilot v1.0", font=self.fonts["title"],
                  fg=self.colors["header"], bg=self.colors["background"]).pack(side="left")
         right_header_frame.pack(side="right")
         header_frame.pack(side="top", fill="x", padx=10, pady=(5, 0))
