@@ -1,46 +1,18 @@
 import tkinter as tk
 from tkinter import font, ttk
+from collections import deque
 
 class OverlayWindow:
-    """
-    Manages the graphical user interface (GUI) overlay for the application.
-
-    This class is responsible for creating, displaying, and updating two distinct,
-    movable overlay windows using Tkinter. It serves as the primary visual
-    component, providing real-time feedback and user controls.
-
-    Windows Managed:
-      - Idle Window: A compact window displayed when no beatmap is loaded. It
-        shows the bot's current status (e.g., IDLE) and provides checkboxes
-        for toggling gameplay mods (HR, DT, NC) and movement styles (Flow Aim).
-      - Detail Window: A more comprehensive window that appears when a beatmap
-        is successfully loaded. It displays detailed information such as beatmap
-        title, difficulty stats (CS, AR, OD, HP), the user's calibrated
-        reaction time, and data about the next upcoming hit object.
-
-    Key Features:
-      - State-driven display that automatically switches between idle and detail views.
-      - Draggable interface, allowing the user to reposition the windows on screen.
-      - A public API of `update_*` methods to dynamically change the displayed
-        information (e.g., status, beatmap name, difficulty).
-      - Integration with a ModHandler to reflect and control active gameplay mods.
-      - A `toggle_visibility` method to hide or show the entire overlay.
-      - Exposes configuration options like "Flow Aim" for other modules to query.
-
-    The class encapsulates all Tkinter setup, styling, and event handling,
-    and runs the main GUI loop via its `run()` method.
-    """
     def __init__(self, mod_handler=None):
         self.root = tk.Tk()
         self.root.withdraw()
-
         self.mod_handler = mod_handler
-
         self._initialize_vars()
         self._create_idle_window()
         self._create_detail_window()
-
+        self._create_debug_canvas()
         self.show_idle_window()
+        self._debug_loop()
 
     def _initialize_vars(self):
         self.colors = {
@@ -58,11 +30,14 @@ class OverlayWindow:
         self.difficulty_var = tk.StringVar(value="...")
         self.note_info_var = tk.StringVar(value="...")
         self.rt_var = tk.StringVar(value="RT: N/A")
-
         self.hr_var = tk.BooleanVar()
         self.dt_var = tk.BooleanVar()
         self.nc_var = tk.BooleanVar()
         self.flow_aim_var = tk.BooleanVar(value=False)
+        self.debug_mode_var = tk.BooleanVar(value=False)
+        self.debug_mode_var.trace_add("write", self._toggle_debug_window_visibility)
+        
+        self.future_notes = []
 
         self._offset_x = 0
         self._offset_y = 0
@@ -74,10 +49,8 @@ class OverlayWindow:
         window.attributes("-topmost", True, "-transparentcolor", "black", "-alpha", 1)
         window.configure(bg="black")
         window.geometry(f"+{self.padding}+{self.padding}")
-
         canvas = tk.Canvas(window, bg="black", highlightthickness=0)
         canvas.pack(fill="both", expand=True)
-
         canvas.bind("<ButtonPress-1>", lambda e: self._start_move(e))
         canvas.bind("<B1-Motion>", lambda e: self._do_move(e, window))
         return canvas
@@ -86,21 +59,17 @@ class OverlayWindow:
         self.idle_window = tk.Toplevel(self.root)
         canvas = self._configure_toplevel(self.idle_window)
         frame = tk.Frame(canvas, bg=self.colors["background"])
-
         header_frame = tk.Frame(frame, bg=self.colors["background"])
         self.idle_status_indicator = tk.Frame(header_frame, bg=self.colors["status_idle"], width=10, height=10)
         self.idle_status_indicator.pack(side="left", padx=(0, 5), anchor="center")
         tk.Label(header_frame, textvariable=self.status_var, font=self.fonts["main"],
                  fg=self.colors["foreground"], bg=self.colors["background"]).pack(side="left", anchor="center")
-        tk.Label(header_frame, text="osu!pilot v1.0", font=self.fonts["title"],
+        tk.Label(header_frame, text="osu!pilot v1.1", font=self.fonts["title"],
                  fg=self.colors["header"], bg=self.colors["background"]).pack(side="right", anchor="center")
         header_frame.pack(side="top", fill="x", padx=10, pady=5)
-
         ttk.Separator(frame, orient='horizontal').pack(side="top", fill="x", padx=5, pady=5)
-        
         tk.Label(frame, text="BEATMAP NOT FOUND", font=self.fonts["main"],
                  fg=self.colors["not_found"], bg=self.colors["background"]).pack(side="top", anchor="w", padx=10, pady=(0, 5))
-
         mod_frame = tk.Frame(frame, bg=self.colors["background"])
         style = ttk.Style()
         style.configure("TCheckbutton",
@@ -110,22 +79,19 @@ class OverlayWindow:
         style.map("TCheckbutton",
                   background=[('active', self.colors["mod_button_bg"]), ('selected', self.colors["mod_button_active"])],
                   foreground=[('selected', self.colors["header"])])
-
         hr_button = ttk.Checkbutton(mod_frame, text="HR", variable=self.hr_var, command=self._toggle_hr, style="TCheckbutton")
         dt_button = ttk.Checkbutton(mod_frame, text="DT", variable=self.dt_var, command=self._toggle_dt, style="TCheckbutton")
         nc_button = ttk.Checkbutton(mod_frame, text="NC", variable=self.nc_var, command=self._toggle_nc, style="TCheckbutton")
-        
         hr_button.pack(side="left", padx=2, fill="x", expand=True)
         dt_button.pack(side="left", padx=2, fill="x", expand=True)
         nc_button.pack(side="left", padx=2, fill="x", expand=True)
-        
         mod_frame.pack(side="top", fill="x", padx=10, pady=(5, 0))
-        
         style_frame = tk.Frame(frame, bg=self.colors["background"])
         flow_aim_button = ttk.Checkbutton(style_frame, text="Flow Aim", variable=self.flow_aim_var, style="TCheckbutton")
         flow_aim_button.pack(side="left", padx=2, fill="x", expand=True)
+        debug_mode_button = ttk.Checkbutton(style_frame, text="Debug Mode", variable=self.debug_mode_var, style="TCheckbutton")
+        debug_mode_button.pack(side="left", padx=2, fill="x", expand=True)
         style_frame.pack(side="top", fill="x", padx=10, pady=(5, 10))
-
         self.idle_frame = frame
         self.idle_canvas = canvas
 
@@ -145,36 +111,86 @@ class OverlayWindow:
     def is_flow_aim_active(self):
         return self.flow_aim_var.get()
 
+    def is_debug_mode_active(self):
+        return self.debug_mode_var.get()
+
+    def _create_debug_canvas(self):
+        self.debug_window = tk.Toplevel(self.root)
+        self.debug_window.overrideredirect(True)
+        self.debug_window.attributes("-topmost", True, "-transparentcolor", "black")
+        self.debug_window.config(bg="black")
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        self.debug_window.geometry(f"{screen_width}x{screen_height}+0+0")
+        self.debug_canvas = tk.Canvas(self.debug_window, bg="black", highlightthickness=0)
+        self.debug_canvas.pack(fill="both", expand=True)
+        self.debug_window.withdraw()
+
+    def _debug_loop(self):
+        if self.debug_mode_var.get() and self.is_visible:
+            self.debug_canvas.delete("all")
+
+            note_colors = ["#76F776", "#FFC777", "#FF6347"]
+            for i, note in enumerate(self.future_notes):
+                note_type = note.get('type')
+                color = note_colors[i] if i < len(note_colors) else "#FFFFFF"
+
+                if note_type == 'slider':
+                    path = note.get('path', [])
+                    if len(path) > 1:
+                        flat_coords = [coord for point in path for coord in point]
+                        self.debug_canvas.create_line(flat_coords, fill=color, width=5)
+                
+                elif note_type == 'circle':
+                    x, y = note['screen_pos']
+                    radius = note.get('radius', 15)
+                    self.debug_canvas.create_oval(
+                        x - radius, y - radius, x + radius, y + radius,
+                        fill=color,
+                        outline=""
+                    )
+        else:
+            self.debug_canvas.delete("all")
+
+        self.root.after(16, self._debug_loop)
+
+    def update_debug_visuals(self, debug_data=None):
+        if debug_data and self.debug_mode_var.get():
+            self.future_notes = debug_data.get('future_notes', [])
+        else:
+            self.future_notes = []
+            
+    def _toggle_debug_window_visibility(self, *args):
+        if self.debug_mode_var.get() and self.is_visible:
+            self.debug_window.deiconify()
+        else:
+            self.debug_window.withdraw()
+
     def _create_detail_window(self):
         self.detail_window = tk.Toplevel(self.root)
         canvas = self._configure_toplevel(self.detail_window)
         frame = tk.Frame(canvas, bg=self.colors["background"])
-
         header_frame = tk.Frame(frame, bg=self.colors["background"])
         self.status_indicator = tk.Frame(header_frame, bg=self.colors["status_armed"], width=10, height=10)
         self.status_indicator.pack(side="left", padx=(0, 5), anchor="center")
         tk.Label(header_frame, textvariable=self.status_var, font=self.fonts["main"],
                  fg=self.colors["foreground"], bg=self.colors["background"]).pack(side="left", anchor="center")
-
         right_header_frame = tk.Frame(header_frame, bg=self.colors["background"])
         tk.Label(right_header_frame, textvariable=self.rt_var, font=self.fonts["main"],
                  fg=self.colors["accent"], bg=self.colors["background"]).pack(side="left", padx=(0, 10))
-        tk.Label(right_header_frame, text="osu!pilot v1.0", font=self.fonts["title"],
+        tk.Label(right_header_frame, text="osu!pilot v1.1", font=self.fonts["title"],
                  fg=self.colors["header"], bg=self.colors["background"]).pack(side="left")
         right_header_frame.pack(side="right")
         header_frame.pack(side="top", fill="x", padx=10, pady=(5, 0))
-
         s = ttk.Style()
         s.configure('TSeparator', background=self.colors["separator"])
         ttk.Separator(frame, orient='horizontal').pack(side="top", fill="x", padx=5, pady=5)
-
         tk.Label(frame, textvariable=self.beatmap_var, font=self.fonts["main"],
                  fg=self.colors["foreground"], bg=self.colors["background"], justify="left").pack(side="top", anchor="w", padx=10)
         tk.Label(frame, textvariable=self.difficulty_var, font=self.fonts["main"],
                  fg=self.colors["foreground"], bg=self.colors["background"], justify="left").pack(side="top", anchor="w", padx=10, pady=2)
         tk.Label(frame, textvariable=self.note_info_var, font=self.fonts["main"],
                  fg=self.colors["accent"], bg=self.colors["background"], justify="left").pack(side="top", anchor="w", padx=10, pady=(0, 5))
-
         self.detail_frame = frame
         self.detail_canvas = canvas
 
@@ -217,8 +233,7 @@ class OverlayWindow:
             self.show_idle_window()
 
     def update_beatmap(self, beatmap_name=None):
-        is_valid = beatmap_name and "not found" not in str(beatmap_name).lower()
-        if is_valid:
+        if beatmap_name and "not found" not in str(beatmap_name).lower():
             active_mods_str = ""
             if self.mod_handler and self.mod_handler.active_mods:
                 active_mods_str = " +" + "".join(sorted(list(self.mod_handler.active_mods)))
@@ -259,12 +274,10 @@ class OverlayWindow:
         else:
             self.idle_window.withdraw()
             self.detail_window.withdraw()
+        self._toggle_debug_window_visibility()
 
     def _create_round_rect(self, canvas, x1, y1, x2, y2, r=25, **kwargs):
-        canvas.create_polygon(
-            x1+r, y1, x2-r, y1, x2, y1, x2, y1+r, x2, y2-r, x2, y2,
-            x2-r, y2, x1+r, y2, x1, y2, x1, y2-r, x1, y1+r, x1, y1,
-            smooth=True, **kwargs)
+        canvas.create_polygon(x1+r, y1, x2-r, y1, x2, y1, x2, y1+r, x2, y2-r, x2, y2, x2-r, y2, x1+r, y2, x1, y2, x1, y2-r, x1, y1+r, x1, y1, smooth=True, **kwargs)
 
     def _start_move(self, event):
         self._offset_x = event.x
@@ -278,13 +291,14 @@ class OverlayWindow:
     def run(self):
         try:
             self.root.mainloop()
-        except (KeyboardInterrupt, tk.TclError):
+        except (KeyboardInterrupt, tk.Toplevel):
             pass
         finally:
             try:
-                for window in self.root.winfo_children():
-                    if isinstance(window, tk.Toplevel):
-                        window.destroy()
-                self.root.destroy()
+                if self.root.winfo_exists():
+                    for window in self.root.winfo_children():
+                        if isinstance(window, tk.Toplevel):
+                            window.destroy()
+                    self.root.destroy()
             except tk.TclError:
                 pass
