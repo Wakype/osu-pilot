@@ -9,7 +9,7 @@
 **An osu! bot that plays by reading the map, not the game's memory.**
 
 <p align="center">
-    <img src="https://img.shields.io/badge/version-1.0-purple.svg" alt="Bot Version">
+    <img src="https://img.shields.io/badge/version-1.1-purple.svg" alt="Bot Version">
     <img src="https://img.shields.io/badge/python-3.8+-blue.svg" alt="Python Version">
     <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License">
     <img src="https://img.shields.io/badge/status-stable-brightgreen" alt="Status">
