@@ -13,6 +13,16 @@ import utils
 import parser
 import config
 
+# --- Stream Detection Constants ---
+# The maximum time between two notes to be considered part of a stream (in milliseconds)
+STREAM_TIME_THRESHOLD_MS = 200
+# The maximum distance between two notes to be considered part of a stream (in osu! pixels)
+STREAM_DISTANCE_THRESHOLD_OSU_PIXELS = 150
+# The minimum number of consecutive notes required to be classified as a stream
+STREAM_MIN_NOTES = 3
+# How many notes to look ahead from the current position to check for a stream
+STREAM_LOOK_AHEAD_BUFFER = 7
+
 class State(Enum):
     IDLE = auto()
     ARMED = auto()
@@ -31,7 +41,7 @@ class Pilot:
         self.q_pressed_flag = False
         self.q_press_time = 0
         self.esc_pressed_flag = False
-        self.noise_strength = 2.5
+        self.noise_strength = 1
         self.noise_scale = 10.0
         self.noise_octaves = 2
         self.noise_persistence = 0.6
@@ -122,11 +132,132 @@ class Pilot:
             start_time = time_circle_actually_appeared - song_timeline_at_keypress_sec
             print("  -> Sync complete. Engaging.")
             self._execute_beatmap(start_time)
-    
+            
+    def _find_stream_group(self, start_index):
+        """
+        Looks ahead from a given index to find a consecutive group of notes that form a stream.
+        """
+        if start_index + STREAM_MIN_NOTES > len(self.beatmap_data["HitObjects"]):
+            return None
+
+        stream_candidates = []
+        for i in range(start_index, min(len(self.beatmap_data["HitObjects"]) - 1, start_index + STREAM_LOOK_AHEAD_BUFFER)):
+            current_obj = self.beatmap_data["HitObjects"][i]
+            next_obj = self.beatmap_data["HitObjects"][i+1]
+            
+            # Streams are only composed of circles
+            if current_obj.get('curveType') or next_obj.get('curveType'):
+                break
+
+            time_delta = next_obj['time'] - current_obj['time']
+            dist = np.linalg.norm(np.array([current_obj['x'], current_obj['y']]) - np.array([next_obj['x'], next_obj['y']]))
+
+            if time_delta <= STREAM_TIME_THRESHOLD_MS and dist <= STREAM_DISTANCE_THRESHOLD_OSU_PIXELS:
+                if not stream_candidates:
+                    stream_candidates.append(current_obj)
+                stream_candidates.append(next_obj)
+            else:
+                break
+        
+        if len(stream_candidates) >= STREAM_MIN_NOTES:
+            return stream_candidates
+            
+        return None
+
+    def _execute_stream_group(self, stream_notes, start_time, last_screen_pos, use_s_key_ref):
+        """
+        Executes a pre-identified group of stream notes with continuous movement.
+        """
+        print(f"  -> Stream detected with {len(stream_notes)} notes. Executing.")
+        stream_start_time_sec = start_time + (stream_notes[0]['time'] / 1000.0) + (config.TIMING_OFFSET_MS / 1000.0)
+        stream_end_time_sec = start_time + (stream_notes[-1]['time'] / 1000.0) + (config.TIMING_OFFSET_MS / 1000.0)
+        total_duration_sec = stream_end_time_sec - stream_start_time_sec
+
+        # Create a path of screen coordinates for the entire stream
+        stream_path_screen = [utils.convert_coordinates(note['x'], note['y'], self.screen_width, self.screen_height) for note in stream_notes]
+        
+        # Prepend the starting mouse position to the path for a smooth entry into the stream
+        entry_path = [last_screen_pos, stream_path_screen[0]]
+        entry_duration_sec = stream_start_time_sec - time.time()
+
+        # Move into the start of the stream
+        if entry_duration_sec > 0.01:
+            move_start_time = time.time()
+            p0, p2 = np.array(entry_path[0]), np.array(entry_path[1])
+            midpoint = (p0 + p2) / 2
+            vec = p2 - p0
+            dist = np.linalg.norm(vec)
+            if dist > 0: perp_vec = np.array([-vec[1], vec[0]]) / dist
+            else: perp_vec = np.array([0, 0])
+            max_offset = dist * 0.20
+            offset = random.uniform(-max_offset, max_offset)
+            p1 = midpoint + perp_vec * offset
+
+            while time.time() < move_start_time + entry_duration_sec:
+                if self.esc_pressed_flag: return last_screen_pos, time.time()
+                progress = (time.time() - move_start_time) / entry_duration_sec
+                eased_progress = utils.ease_in_out_sine(min(progress, 1.0))
+                bezier_pos = utils.calculate_quadratic_bezier_point(p0, p1, p2, eased_progress)
+                pydirectinput.moveTo(int(bezier_pos[0]), int(bezier_pos[1]))
+                time.sleep(0.001)
+
+        # Execute the main stream path with continuous movement
+        stream_exec_start_time = time.time()
+        note_index_in_stream = 0
+        
+        while time.time() < stream_exec_start_time + total_duration_sec:
+            if self.esc_pressed_flag: break
+            
+            # Continuous cursor movement
+            stream_progress = (time.time() - stream_exec_start_time) / total_duration_sec
+            stream_progress = min(stream_progress, 1.0)
+            
+            # Find which segment of the path we are on
+            segment_progress = stream_progress * (len(stream_path_screen) - 1)
+            path_idx = int(segment_progress)
+            local_progress = segment_progress - path_idx
+
+            p_start = np.array(stream_path_screen[path_idx])
+            p_end = np.array(stream_path_screen[min(path_idx + 1, len(stream_path_screen) - 1)])
+            
+            current_pos = p_start * (1 - local_progress) + p_end * local_progress
+            pydirectinput.moveTo(int(current_pos[0]), int(current_pos[1]))
+            
+            # Decoupled clicking logic
+            if note_index_in_stream < len(stream_notes):
+                note_hit_time_sec = start_time + (stream_notes[note_index_in_stream]['time'] / 1000.0) + (config.TIMING_OFFSET_MS / 1000.0)
+                if time.time() >= note_hit_time_sec:
+                    key_to_press = 's' if use_s_key_ref['value'] else 'a'
+                    pydirectinput.keyDown(key_to_press)
+                    time.sleep(0.01)
+                    pydirectinput.keyUp(key_to_press)
+                    use_s_key_ref['value'] = not use_s_key_ref['value']
+                    note_index_in_stream += 1
+            
+            time.sleep(0.001)
+
+        # Ensure all clicks in the stream are executed if timing was tight
+        while note_index_in_stream < len(stream_notes):
+            if self.esc_pressed_flag: break
+            note_hit_time_sec = start_time + (stream_notes[note_index_in_stream]['time'] / 1000.0) + (config.TIMING_OFFSET_MS / 1000.0)
+            while time.time() < note_hit_time_sec:
+                 if self.esc_pressed_flag: break
+            if self.esc_pressed_flag: break
+            key_to_press = 's' if use_s_key_ref['value'] else 'a'
+            pydirectinput.keyDown(key_to_press)
+            time.sleep(0.01)
+            pydirectinput.keyUp(key_to_press)
+            use_s_key_ref['value'] = not use_s_key_ref['value']
+            note_index_in_stream += 1
+            
+        final_pos = stream_path_screen[-1]
+        return final_pos, time.time()
+
+
     def _execute_beatmap(self, start_time):
         self.state = State.RUNNING
         hit_object_index = 0
-        use_s_key = True
+        use_s_key_ref = {'value': True} # Use dict to pass by reference
         last_action_time_sec = time.time()
         last_screen_pos = pyautogui.position()
         p_minus_1 = None
@@ -138,6 +269,23 @@ class Pilot:
                 break
             
             self.overlay.update_status(self.state.name)
+            
+            # --- Stream Detection Logic ---
+            stream_group = self._find_stream_group(hit_object_index)
+            
+            if stream_group:
+                # Execute the entire stream as one atomic operation
+                new_last_pos, new_last_action_time = self._execute_stream_group(stream_group, start_time, last_screen_pos, use_s_key_ref)
+                
+                # Update state after stream execution
+                last_screen_pos = new_last_pos
+                p_minus_1 = np.array(last_screen_pos)
+                last_action_time_sec = new_last_action_time
+                hit_object_index += len(stream_group)
+                continue # Skip to the next iteration of the main loop
+            # --- End of Stream Logic ---
+
+            # --- Default (Non-Stream) Object Logic ---
             hit_object = self.beatmap_data["HitObjects"][hit_object_index]
             self.overlay.update_note_info(hit_object, hit_object_index)
 
@@ -178,7 +326,6 @@ class Pilot:
 
             if self.overlay.is_debug_mode_active():
                 future_notes_to_draw = []
-                # Look ahead for the next 3 objects
                 for i in range(1, 4):
                     if hit_object_index + i < len(self.beatmap_data["HitObjects"]):
                         note = self.beatmap_data["HitObjects"][hit_object_index + i]
@@ -186,23 +333,19 @@ class Pilot:
                         
                         note_info = {}
                         if is_slider:
-                            # Calculate the full slider path in osu! pixels
                             osu_pixel_path = parser.calculate_slider_path(note)
-                            # Convert the entire path to screen coordinates
                             screen_path = [utils.convert_coordinates(px, py, self.screen_width, self.screen_height) for px, py in osu_pixel_path]
                             note_info['type'] = 'slider'
                             note_info['path'] = screen_path
-                        else: # It's a circle
+                        else:
                             pos = utils.convert_coordinates(note['x'], note['y'], self.screen_width, self.screen_height)
                             note_info['type'] = 'circle'
                             note_info['screen_pos'] = pos
-                            note_info['radius'] = 40 - (i * 5) # Decrease radius for notes further away
+                            note_info['radius'] = 40 - (i * 5)
                         
                         future_notes_to_draw.append(note_info)
 
-                self.overlay.update_debug_visuals({
-                    'future_notes': future_notes_to_draw
-                })
+                self.overlay.update_debug_visuals({'future_notes': future_notes_to_draw})
             else:
                 self.overlay.update_debug_visuals(None)
 
@@ -229,7 +372,7 @@ class Pilot:
 
             if self.esc_pressed_flag: break
 
-            key_to_press = 's' if use_s_key else 'a'
+            key_to_press = 's' if use_s_key_ref['value'] else 'a'
             is_spinner = hit_object['type'] & 8
             is_slider = hit_object.get('curveType') is not None
             if is_spinner:
@@ -270,7 +413,7 @@ class Pilot:
                     if not self.esc_pressed_flag:
                         final_slider_pos_osu = path[-1] if hit_object['slides'] % 2 == 1 else path[0]
                         last_screen_pos = utils.convert_coordinates(final_slider_pos_osu[0], final_slider_pos_osu[1], self.screen_width, self.screen_height)
-            else:
+            else: # Circle
                 pydirectinput.keyDown(key_to_press)
                 time.sleep(0.01)
                 pydirectinput.keyUp(key_to_press)
@@ -278,7 +421,7 @@ class Pilot:
             
             p_minus_1 = np.array(last_screen_pos)
             last_action_time_sec = time.time()
-            use_s_key = not use_s_key
+            use_s_key_ref['value'] = not use_s_key_ref['value']
             hit_object_index += 1
         
         if hit_object_index >= len(self.beatmap_data["HitObjects"]):
