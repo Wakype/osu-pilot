@@ -277,9 +277,9 @@ const HowItWorks: React.FC = () => {
               {/* Draw Slider Body */}
               {activeSliderPath && (
                 <path
-                  d={activeSliderPath.replace(
+                  d={activeSliderPath.replaceAll(
                     /([0-9.]+) ([0-9.]+)/g,
-                    (match, x, y) => `${x}% ${y}%`
+                    (_, x, y) => `${x}% ${y}%`
                   )}
                   fill="none"
                   stroke="rgba(6, 182, 212, 0.3)"
@@ -290,9 +290,9 @@ const HowItWorks: React.FC = () => {
               )}
               {activeSliderPath && (
                 <path
-                  d={activeSliderPath.replace(
+                  d={activeSliderPath.replaceAll(
                     /([0-9.]+) ([0-9.]+)/g,
-                    (match, x, y) => `${x}% ${y}%`
+                    (_, x, y) => `${x}% ${y}%`
                   )}
                   fill="none"
                   stroke="white"
